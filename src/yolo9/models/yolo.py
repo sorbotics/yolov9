@@ -14,11 +14,18 @@ if platform.system() != 'Windows':
 
 from yolo9.models.common import *
 from yolo9.models.experimental import *
+import yolo9.models.common as common_mod
+import yolo9.models.experimental as experimental_mod
 from yolo9.utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
 from yolo9.utils.plots import feature_visualization
 from yolo9.utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, select_device,
-                               time_sync)
+                  time_sync)
 from yolo9.utils.tal.anchor_generator import make_anchors, dist2bbox
+
+# Ensure parse_model(eval(...)) can resolve layer symbols (Conv, RepNCSPELAN4, etc.)
+# even when wildcard imports are filtered by packaging/import quirks.
+globals().update({k: v for k, v in common_mod.__dict__.items() if not k.startswith("_")})
+globals().update({k: v for k, v in experimental_mod.__dict__.items() if not k.startswith("_")})
 
 try:
     import thop  # for FLOPs computation
@@ -549,13 +556,17 @@ class BaseModel(nn.Module):
         if c:
             LOGGER.info(f"{sum(dt):10.2f} {'-':>10s} {'-':>10s}  Total")
 
-    def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
+    def fuse(self): # fuse model Conv2d() + BatchNorm2d() layers
+        import yolo9.models.common as _common_mod
+        _RepConvN = _common_mod.RepConvN
+        _Conv = _common_mod.Conv
+        _DWConv = _common_mod.DWConv
         LOGGER.info('Fusing layers... ')
         for m in self.model.modules():
-            if isinstance(m, (RepConvN)) and hasattr(m, 'fuse_convs'):
+            if isinstance(m, (_RepConvN)) and hasattr(m, 'fuse_convs'):
                 m.fuse_convs()
-                m.forward = m.forward_fuse  # update forward
-            if isinstance(m, (Conv, DWConv)) and hasattr(m, 'bn'):
+                m.forward = m.forward_fuse # update forward
+            if isinstance(m, (_Conv, _DWConv)) and hasattr(m, 'bn'):
                 m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
                 delattr(m, 'bn')  # remove batchnorm
                 m.forward = m.forward_fuse  # update forward
@@ -712,6 +723,21 @@ class ClassificationModel(BaseModel):
 
 def parse_model(d, ch):  # model_dict, input_channels(3)
     # Parse a YOLO model.yaml dictionary
+    globals().update({k: v for k, v in common_mod.__dict__.items() if not k.startswith("_")})
+    globals().update({k: v for k, v in experimental_mod.__dict__.items() if not k.startswith("_")})
+
+    required_symbols = [
+        "Conv", "AConv", "ConvTranspose", "Bottleneck", "SPP", "SPPF", "DWConv", "BottleneckCSP",
+        "DWConvTranspose2d", "SPPCSPC", "ADown", "ELAN1", "RepNCSPELAN4", "SPPELAN",
+        "Concat", "Shortcut", "ReOrg", "CBLinear", "CBFuse", "Contract", "Expand",
+    ]
+    for sym in required_symbols:
+        if sym not in globals():
+            if hasattr(common_mod, sym):
+                globals()[sym] = getattr(common_mod, sym)
+            elif hasattr(experimental_mod, sym):
+                globals()[sym] = getattr(experimental_mod, sym)
+
     LOGGER.info(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40}{'arguments':<30}")
     anchors, nc, gd, gw, act = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple'], d.get('activation')
     if act:
@@ -723,7 +749,16 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
-        m = eval(m) if isinstance(m, str) else m  # eval strings
+        if isinstance(m, str):
+            # Resolve symbols robustly even when wildcard imports are incomplete.
+            if m in globals():
+                m = globals()[m]
+            elif hasattr(common_mod, m):
+                m = getattr(common_mod, m)
+            elif hasattr(experimental_mod, m):
+                m = getattr(experimental_mod, m)
+            else:
+                m = eval(m)
         for j, a in enumerate(args):
             with contextlib.suppress(NameError):
                 args[j] = eval(a) if isinstance(a, str) else a  # eval strings
