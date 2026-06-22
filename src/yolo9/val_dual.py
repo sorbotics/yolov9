@@ -193,8 +193,7 @@ def run(
         # Loss
         if compute_loss:
             preds = preds[1]
-            #train_out = train_out[1]
-            #loss += compute_loss(train_out, targets)[1]  # box, obj, cls
+            loss += compute_loss(train_out, targets)[1]  # box, obj, cls
         else:
             preds = preds[0][1]
 
