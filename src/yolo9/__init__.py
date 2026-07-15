@@ -1,8 +1,11 @@
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
+import os
+import requests
 
 import numpy as np
+import yaml
 import torch
 import cv2
 from yolo9.models.common import DetectMultiBackend
@@ -29,38 +32,44 @@ class YOLO9:
         weights_dir.mkdir(exist_ok=True)
         data = Path(__file__).parent / 'data' / 'coco.yaml'
 
-        self.model_name = model
-        self.weights_path = weights_dir / f'{model}.pt'
+        if "/" in model and os.path.isdir(model):
+            self.model_name = model.split("/")[-1]
+            self.weights_path = Path(model) / 'weights.pt'
+            with open(Path(model) / 'names.yaml', 'r') as f:
+                self.class_names = yaml.load(f, Loader=yaml.FullLoader)["names"]
+        else:  # Back compatibility
+            self.model_name = model
+            self.weights_path = weights_dir / f'{model}.pt'
+            if "hardhat" in self.model_name:
+                self.class_names = hardhat_names
+            elif "carplate" in self.model_name:
+                self.class_names = carplate_names
+            elif "gasleak" in self.model_name:
+                self.class_names = gas_leak_names
+            elif "fire-smoke" in self.model_name:
+                self.class_names = firesmoke_names
+            else:
+                self.class_names = coco_names
+            if not self.weights_path.exists():
+                LOGGER.info(f"Downloading {self.weights_path.name} from GitHub releases...")
+                url = f"https://github.com/alejandroalfonsoyero/yolov9/releases/download/v1.0.2/{model}.pt"
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+
+                with open(self.weights_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                LOGGER.info(f"Downloaded {self.weights_path.name} successfully")
+
         self.device = select_device(device)
         self.conf_thres = min(classes.values()) if classes else 0.25
         self.iou_thres = iou_threshold
         self.max_det = max_det
         self.classes = classes
-        if not self.weights_path.exists():
-            LOGGER.info(f"Downloading {self.weights_path.name} from GitHub releases...")
-            import requests
-            url = f"https://github.com/alejandroalfonsoyero/yolov9/releases/download/v1.0.2/{model}.pt"
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-
-            with open(self.weights_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            LOGGER.info(f"Downloaded {self.weights_path.name} successfully")
 
         self.model = DetectMultiBackend(self.weights_path, device=self.device, dnn=dnn, data=data, fp16=half)
         self.img_size = 640
         self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else batch_size, 3, self.img_size, self.img_size))
-        if "hardhat" in self.model_name:
-            self.class_names = hardhat_names
-        elif "carplate" in self.model_name:
-            self.class_names = carplate_names
-        elif "gasleak" in self.model_name:
-            self.class_names = gas_leak_names
-        elif "fire-smoke" in self.model_name:
-            self.class_names = firesmoke_names
-        else:
-            self.class_names = coco_names
 
     def detect(self, image: np.ndarray) -> list:
         im = cv2.resize(image, (self.img_size, self.img_size))
