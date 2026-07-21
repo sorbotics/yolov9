@@ -61,6 +61,8 @@ class YOLO9:
                         f.write(chunk)
                 LOGGER.info(f"Downloaded {self.weights_path.name} successfully")
 
+        self.class_names = {int(k): v for k, v in self.class_names.items()}
+
         self.device = select_device(device)
         self.conf_thres = min(classes.values()) if classes else 0.25
         self.iou_thres = iou_threshold
@@ -101,7 +103,7 @@ class YOLO9:
                         if confidence < self.classes[class_id]:
                             continue
                         detections.append((segment, confidence, class_id, self.class_names[class_id]))
-        else:        
+        else:
             pred = self.model(im)
             pred = non_max_suppression(pred, conf_thres=self.conf_thres, iou_thres=self.iou_thres, max_det=self.max_det)[0]
 
