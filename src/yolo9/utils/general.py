@@ -8,6 +8,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import signal
 import sys
 import time
@@ -401,16 +402,19 @@ def check_requirements(requirements=ROOT / 'requirements.txt', exclude=(), insta
 
     s = ''
     n = 0
+    missing = []
     for r in requirements:
         if not _requirement_met(r):  # not installed, or installed version outside the specifier
             s += f'"{r}" '
             n += 1
+            missing.append(r)
 
     if s and install and AUTOINSTALL:  # check environment variable
         LOGGER.info(f"{prefix} YOLO requirement{'s' * (n > 1)} {s}not found, attempting AutoUpdate...")
         try:
             # assert check_online(), "AutoUpdate skipped (offline)"
-            LOGGER.info(check_output(f'pip install {s} {cmds}', shell=True).decode())
+            # argument list, no shell: requirement strings are never shell-interpreted
+            LOGGER.info(check_output([sys.executable, '-m', 'pip', 'install', *missing, *shlex.split(cmds)]).decode())
             source = file if 'file' in locals() else requirements
             s = f"{prefix} {n} package{'s' * (n > 1)} updated per {source}\n" \
                 f"{prefix} ⚠️ {colorstr('bold', 'Restart runtime or rerun command for updates to take effect')}\n"
