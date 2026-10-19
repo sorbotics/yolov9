@@ -14,6 +14,7 @@ dependencies = [
     "matplotlib>=3.2.2",
     "numpy>=1.18.5",
     "opencv-python>=4.1.1",
+    "packaging",
     "Pillow>=8.0.0",  # FreeTypeFont.getbbox
     "psutil",
     "PyYAML>=5.3.1",
