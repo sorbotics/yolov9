@@ -8,6 +8,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import signal
 import sys
 import time
@@ -26,10 +27,12 @@ import cv2
 import IPython
 import numpy as np
 import pandas as pd
-import pkg_resources as pkg
+from importlib import metadata as importlib_metadata
 import torch
 import torchvision
 import yaml
+from packaging.requirements import Requirement
+from packaging.version import parse as parse_version
 
 from . import TryExcept, emojis
 from .downloads import gsutil_getsize
@@ -363,7 +366,7 @@ def check_python(minimum='3.7.0'):
 
 def check_version(current='0.0.0', minimum='0.0.0', name='version ', pinned=False, hard=False, verbose=False):
     # Check version vs. required version
-    current, minimum = (pkg.parse_version(x) for x in (current, minimum))
+    current, minimum = (parse_version(x) for x in (current, minimum))
     result = (current == minimum) if pinned else (current >= minimum)  # bool
     s = f'WARNING ⚠️ {name}{minimum} is required by YOLO, but {name}{current} is currently installed'  # string
     if hard:
@@ -374,6 +377,16 @@ def check_version(current='0.0.0', minimum='0.0.0', name='version ', pinned=Fals
 
 
 @TryExcept()
+def _requirement_met(requirement):
+    # Replaces pkg_resources.require(): is the distribution installed at a version the specifier allows?
+    # (pkg_resources also walked transitive dependencies; this checks the named requirement only.)
+    req = Requirement(requirement)
+    try:
+        return req.specifier.contains(importlib_metadata.version(req.name), prereleases=True)
+    except importlib_metadata.PackageNotFoundError:
+        return False
+
+
 def check_requirements(requirements=ROOT / 'requirements.txt', exclude=(), install=True, cmds=''):
     # Check installed dependencies meet YOLO requirements (pass *.txt file or list of packages or single package str)
     prefix = colorstr('red', 'bold', 'requirements:')
@@ -382,24 +395,26 @@ def check_requirements(requirements=ROOT / 'requirements.txt', exclude=(), insta
         file = requirements.resolve()
         assert file.exists(), f"{prefix} {file} not found, check failed."
         with file.open() as f:
-            requirements = [f'{x.name}{x.specifier}' for x in pkg.parse_requirements(f) if x.name not in exclude]
+            lines = (line.split('#')[0].strip() for line in f)
+            requirements = [f'{x.name}{x.specifier}' for x in map(Requirement, filter(None, lines)) if x.name not in exclude]
     elif isinstance(requirements, str):
         requirements = [requirements]
 
     s = ''
     n = 0
+    missing = []
     for r in requirements:
-        try:
-            pkg.require(r)
-        except (pkg.VersionConflict, pkg.DistributionNotFound):  # exception if requirements not met
+        if not _requirement_met(r):  # not installed, or installed version outside the specifier
             s += f'"{r}" '
             n += 1
+            missing.append(r)
 
     if s and install and AUTOINSTALL:  # check environment variable
         LOGGER.info(f"{prefix} YOLO requirement{'s' * (n > 1)} {s}not found, attempting AutoUpdate...")
         try:
             # assert check_online(), "AutoUpdate skipped (offline)"
-            LOGGER.info(check_output(f'pip install {s} {cmds}', shell=True).decode())
+            # argument list, no shell: requirement strings are never shell-interpreted
+            LOGGER.info(check_output([sys.executable, '-m', 'pip', 'install', *missing, *shlex.split(cmds)]).decode())
             source = file if 'file' in locals() else requirements
             s = f"{prefix} {n} package{'s' * (n > 1)} updated per {source}\n" \
                 f"{prefix} ⚠️ {colorstr('bold', 'Restart runtime or rerun command for updates to take effect')}\n"
