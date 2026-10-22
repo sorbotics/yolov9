@@ -105,6 +105,8 @@ class YOLO9:
                         detections.append((segment, confidence, class_id, self.class_names[class_id]))
         else:
             pred = self.model(im)
+            if isinstance(pred[0], (list, tuple)):  # DualDDetect eval output is ([aux, main], ...): NMS would take the aux head
+                pred = pred[0][1]
             pred = non_max_suppression(pred, conf_thres=self.conf_thres, iou_thres=self.iou_thres, max_det=self.max_det)[0]
 
             for det in pred:
