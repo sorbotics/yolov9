@@ -502,7 +502,10 @@ def check_font(font=FONT, progress=False):
     if not font.exists() and not file.exists():
         url = f'https://ultralytics.com/assets/{font.name}'
         LOGGER.info(f'Downloading {url} to {file}...')
-        torch.hub.download_url_to_file(url, str(file), progress=progress)
+        try:
+            torch.hub.download_url_to_file(url, str(file), progress=progress)
+        except Exception as e:  # offline or blocked network: the font is only used to draw labels on plots
+            LOGGER.warning(f'Could not download {font.name} ({e}); plots will use the default font')
 
 
 def check_dataset(data, autodownload=True):
