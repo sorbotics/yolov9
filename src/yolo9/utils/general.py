@@ -495,16 +495,20 @@ def check_file(file, suffix=''):
         return files[0]  # return file
 
 
+_FONT_DOWNLOAD_FAILED = set()  # font names whose download failed in this process: do not retry on every plot
+
+
 def check_font(font=FONT, progress=False):
-    # Download font to CONFIG_DIR if necessary
+    # Download font to CONFIG_DIR if necessary (a failed download is attempted only once per process)
     font = Path(font)
     file = CONFIG_DIR / font.name
-    if not font.exists() and not file.exists():
+    if not font.exists() and not file.exists() and font.name not in _FONT_DOWNLOAD_FAILED:
         url = f'https://ultralytics.com/assets/{font.name}'
         LOGGER.info(f'Downloading {url} to {file}...')
         try:
             torch.hub.download_url_to_file(url, str(file), progress=progress)
         except Exception as e:  # offline or blocked network: the font is only used to draw labels on plots
+            _FONT_DOWNLOAD_FAILED.add(font.name)
             LOGGER.warning(f'Could not download {font.name} ({e}); plots will use the default font')
 
 
