@@ -98,7 +98,9 @@ def run(
         # Inference
         with dt[1]:
             visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-            pred, proto = model(im, augment=augment, visualize=visualize)[:2]
+            out = model(im, augment=augment, visualize=visualize)
+            # eval-mode Panoptic returns (pred, (x, mc, protos, semantic)); exported backends return (pred, protos, semantic)
+            pred, proto = out[0], out[1][-2] if isinstance(out[1], (list, tuple)) else out[1]
 
         # NMS
         with dt[2]:
