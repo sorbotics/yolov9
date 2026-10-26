@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yolo9"
-version = "1.0.16"
+version = "1.0.17"
 description = "Package version of WongKinYiu/yolov9"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ dependencies = [
     "ipython",
     "matplotlib>=3.2.2",
     "numpy>=1.18.5",
-    "opencv-python>=4.1.1",
+    "opencv-python-headless>=4.1.1",
     "packaging",
     "Pillow>=8.0.0",  # FreeTypeFont.getbbox
     "psutil",
@@ -26,7 +26,7 @@ dependencies = [
     "tqdm>=4.64.0",
     "pandas>=1.1.4",
     "seaborn>=0.11.0",
-    "albumentations>=1.0.3",
+    "albumentations>=1.0.3,<1.4.0",
     "pycocotools>=2.0",
 ]
 
