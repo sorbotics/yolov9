@@ -376,7 +376,6 @@ def check_version(current='0.0.0', minimum='0.0.0', name='version ', pinned=Fals
     return result
 
 
-@TryExcept()
 def _requirement_met(requirement):
     # Replaces pkg_resources.require(): is the distribution installed at a version the specifier allows?
     # (pkg_resources also walked transitive dependencies; this checks the named requirement only.)
@@ -387,6 +386,7 @@ def _requirement_met(requirement):
         return False
 
 
+@TryExcept()
 def check_requirements(requirements=ROOT / 'requirements.txt', exclude=(), install=True, cmds=''):
     # Check installed dependencies meet YOLO requirements (pass *.txt file or list of packages or single package str)
     prefix = colorstr('red', 'bold', 'requirements:')
