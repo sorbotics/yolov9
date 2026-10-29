@@ -512,8 +512,10 @@ def check_font(font=FONT, progress=False):
             LOGGER.warning(f'Could not download {font.name} ({e}); plots will use the default font')
 
 
-def check_dataset(data, autodownload=True):
+def check_dataset(data, autodownload=False):
     # Download, check and/or unzip dataset if not found locally
+    # autodownload is off by default: it runs the yaml `download:` value with os.system/exec,
+    # so a crafted data.yaml would run code. Callers that want it must pass True explicitly.
 
     # Download (optional)
     extract_dir = ''
